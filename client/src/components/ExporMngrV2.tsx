@@ -1,5 +1,5 @@
 import { MngrReport, Seller } from '../types/cartera'
-import { utils, ColInfo, writeFile } from 'xlsx'
+import { utils, writeFile } from 'xlsx'
 import { Button } from './ui'
 import { toast } from 'sonner'
 
