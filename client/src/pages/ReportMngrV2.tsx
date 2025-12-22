@@ -7,7 +7,7 @@ import { API_URL } from '../utils/contanst'
 import axios from 'axios'
 import { toast } from 'sonner'
 
-export default function ReportMngrv2 () {
+export default function ReportMngrv2() {
   const [data, setData] = useState<Response | null>(null)
   const [documento, setDocumento] = useState<string>('')
   const [fecha1, setFecha1] = useState<string>('')
@@ -43,6 +43,34 @@ export default function ReportMngrv2 () {
   const saldoInicial = data?.CarteraInicial.SALDO_ANT || 0
   const base = data?.base || 0
   const total = sumaIngresos + saldoInicial - sumaEgresos - sumaAbonos - base
+
+  let saldoFinalAnterior = saldoInicial
+
+  const carteraConSaldo = data?.cartera.map((item, index) => {
+    let saldoFinal: number
+
+    if (index === 0) {
+      // F6 = H4 - E6
+      saldoFinal = saldoInicial - item.abonos_cartera
+    } else {
+      // Fn = D(n-1) - E(n) + F(n-1)
+      const saldoDiaAnterior =
+        data.cartera[index - 1].ingresos -
+        data.cartera[index - 1].egresos
+
+      saldoFinal =
+        saldoDiaAnterior -
+        item.abonos_cartera +
+        saldoFinalAnterior
+    }
+
+    saldoFinalAnterior = saldoFinal
+
+    return {
+      ...item,
+      saldoFinal
+    }
+  }) ?? []
 
   return (
     <>
@@ -86,12 +114,14 @@ export default function ReportMngrv2 () {
             type='submit'
           >
             {
-              loading ? <div className='flex items-center justify-center gap-2'>
-                <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 1 1 16 0A8 8 0 0 1 4 12z"></path>
-                </svg>
-                Buscando ...</div> : 'Buscar'
+              loading
+                ? <div className='flex items-center justify-center gap-2'>
+                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 1 1 16 0A8 8 0 0 1 4 12z"></path>
+                  </svg>
+                  Buscando ...</div>
+                : 'Buscar'
             }
           </Button>
         </form>
@@ -101,7 +131,7 @@ export default function ReportMngrv2 () {
         <p>Nombre: {data?.Seller.NOMBRES}</p>
         <p>Cargo: {data?.Seller.NOMBRECARGO}</p>
         <p>Empresa:<span className='px-1'>{data?.Seller.CCOSTO === '39632' ? 'SERVIRED' : 'MULTIRED'}</span></p>
-        <BottonExporCarteraMngrV2 datos={data?.cartera || []} initial={saldoInicial} base={base} info={data?.Seller}/>
+        <BottonExporCarteraMngrV2 datos={data?.cartera || []} initial={saldoInicial} base={base} info={data?.Seller} />
       </Card>
       <Card className='mt-1'>
         <div className='flex justify-end'>
@@ -116,19 +146,19 @@ export default function ReportMngrv2 () {
                 <TableHeaderCell className="text-right">Egresos</TableHeaderCell>
                 <TableHeaderCell className="text-right">Saldo Día</TableHeaderCell>
                 <TableHeaderCell className="text-right">Abono Cartera</TableHeaderCell>
-                <TableHeaderCell className="text-right">Diferencia día</TableHeaderCell>
+                <TableHeaderCell className="text-right">Saldo Final</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {
-                data?.cartera.map((item, index) => (
+                carteraConSaldo?.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.fecha.split('T')[0]}</TableCell>
                     <TableCell className="text-right">{formatValue(item.ingresos)}</TableCell>
                     <TableCell className="text-right">{formatValue(item.egresos)}</TableCell>
                     <TableCell className="text-right">{formatValue(item.ingresos - item.egresos)}</TableCell>
                     <TableCell className="text-right">{formatValue(item.abonos_cartera)}</TableCell>
-                    <TableCell className="text-right">{formatValue((item.ingresos - item.egresos) - item.abonos_cartera)}</TableCell>
+                    <TableCell className="text-right">{formatValue(item.saldoFinal)}</TableCell>
                   </TableRow>
                 ))
               }
