@@ -3,20 +3,34 @@ import oracledb, { Pool } from 'oracledb';
 
 oracledb.initOracleClient({ libDir: DB_ORACLE_DIR });
 
-export async function connMngrOra(): Promise<Pool | Error> {
-  try {
-    const pool = await oracledb.createPool({
+// Singleton: pool Manager se crea una vez y se reutiliza
+let mngrPool: Pool | null = null;
+
+export async function getMngrPool(): Promise<Pool> {
+  if (!mngrPool) {
+    console.log('[Oracle] Creando pool de conexiones Manager...');
+    mngrPool = await oracledb.createPool({
       user: DB_MNG_USER,
       password: DB_MNG_PASS,
       configDir: DB_ORACLE_DIR_TNS,
-      connectString: DB_ORACLE_NAME
-    })
+      connectString: DB_ORACLE_NAME,
+      poolAlias: 'oracleMngr',
+      poolMin: 2,
+      poolMax: 10,
+      poolIncrement: 1
+    });
+    console.log('[Oracle] Pool Manager creado exitosamente');
+  }
+  return mngrPool;
+}
 
-    if (!pool) throw new Error('Error connecting to Oracle database');
-
-    return pool;
+// Mantener función legacy por compatibilidad (deprecated)
+/** @deprecated Use getMngrPool() instead */
+export async function connMngrOra(): Promise<Pool | Error> {
+  try {
+    return await getMngrPool();
   } catch (error) {
     console.error('Error connecting to Oracle database', error);
-    return error as Error
-  } 
+    return error as Error;
+  }
 }

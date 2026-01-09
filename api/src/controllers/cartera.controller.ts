@@ -1,6 +1,6 @@
 import { CarteraDataServices } from '../services/cartera.services'
 import { mapCarteraResults } from '../utils/funtions';
-import { connMngrOra } from '../connections/mngr'
+import { getMngrPool } from '../connections/mngr'
 import { Request, Response } from 'express'
 import { Bases, Cartera, Sellers } from '../model';
 import { z } from 'zod';
@@ -30,7 +30,7 @@ export const getCartera = async (req: Request, res: Response) => {
 
   if (!empresa || !abs) {
     res.status(400).json({ message: 'Missing parameters' });
-    return 
+    return
   }
 
   const absBool = abs === 'true' ? true : false;
@@ -50,12 +50,12 @@ export const getReportMngr = async (req: Request, res: Response) => {
 
   if (!success) {
     res.status(400).json({ message: error.format() });
-    return 
+    return
   }
 
   if (!data) {
     res.status(400).json({ message: 'Missing parameters' });
-    return 
+    return
   }
 
   const fecha1 = data.fecha1.split(' ')[0];
@@ -85,18 +85,14 @@ export const getReportMngr = async (req: Request, res: Response) => {
 
     if (!SellerPowerBi) {
       res.status(404).json({ message: 'El documento ingresado no se encuentra en BD POWER BI' });
-      return 
+      return
     }
 
     const base = await Bases.findOne({ attributes: ['BASE'], where: { VINCULADO: vinculado } })
 
     const SQL_CODES = SellerPowerBi.CCOSTO === '39632' ? CODIGOS_SERVIRED : CODIGO_MULTIRED;
 
-    const pool = await connMngrOra();
-
-    if (pool instanceof Error) {
-      throw new Error('Error al intentar conectar a la base de datos')
-    }
+    const pool = await getMngrPool();
 
     connetion = await pool.getConnection();
 

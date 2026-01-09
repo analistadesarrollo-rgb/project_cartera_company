@@ -1,4 +1,4 @@
-import { connOracle_naos } from '../connections/oracledb.naos';
+import { getNaosPool } from '../connections/oracledb.naos';
 import { RowType } from '../types/interface';
 import { Connection } from 'oracledb';
 
@@ -9,12 +9,7 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
 
   const datesString = FunBetweenDates(fecha1, fecha2);
 
-  const pool = await connOracle_naos();
-
-
-  if (pool instanceof Error) {
-    throw new Error('Error al intentar conectar a la base de datos')
-  }
+  const pool = await getNaosPool();
 
   connection = await pool.getConnection();
   try {

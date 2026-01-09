@@ -1,4 +1,4 @@
-import { connOracle } from '../connections/oracledb';
+import { getOraclePool } from '../connections/oracledb';
 import { RowType } from '../types/interface';
 import { Connection } from 'oracledb';
 
@@ -9,11 +9,7 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
 
   const datesString = FunBetweenDates(fecha1, fecha2);
 
-  const pool = await connOracle();
-
-  if (pool instanceof Error) {
-    throw new Error('Error al intentar conectar a la base de datos')
-  }
+  const pool = await getOraclePool();
 
   connection = await pool.getConnection();
 
