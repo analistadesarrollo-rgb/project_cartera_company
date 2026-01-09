@@ -22,6 +22,12 @@ services:
       - red-gane-int
     environment:
       - TZ=America/Bogota
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:80/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 networks:
   red-gane-int:
