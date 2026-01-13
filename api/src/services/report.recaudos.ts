@@ -3,17 +3,14 @@ import { executeWithTimeout, getConnectionSafe } from '../utils/oracleHelper';
 import { RowType } from '../types/interface';
 import { Connection } from 'oracledb';
 
-const FunBetweenDates = (startDate: string, endDate: string) => `trunc (CJ.fechasys) between TO_DATE('${startDate}', 'DD/MM/YYYY') and TO_DATE('${endDate}', 'DD/MM/YYYY')`;
-
 export async function reportRecaudo(fecha1: string, fecha2: string, zona: string) {
   let connection: Connection | undefined;
-  const datesString = FunBetweenDates(fecha1, fecha2);
 
   try {
     // Obtener conexión con verificación
     connection = await getConnectionSafe(getNaosPool, 'oracleNaos');
 
-    // Ejecutar con timeout de 60 segundos
+    // Ejecutar con timeout de 60 segundos - usando parámetros bind para seguridad
     const { rows, metaData } = await executeWithTimeout<RowType[]>(
       connection,
       `SELECT 
@@ -52,7 +49,7 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
             pe2.documento = substr(CJ.loginregistro, 4)
         )
       WHERE
-        ${datesString}
+        trunc(CJ.fechasys) between TO_DATE(:fecha1, 'DD/MM/YYYY') and TO_DATE(:fecha2, 'DD/MM/YYYY')
         and CJ.TRANS_CODIGO in (47, 49)
         and substr(cj.loginregistro, 3) in (
             select distinct
@@ -61,10 +58,10 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
             WHERE
                 grupcodi in (16, 17)
         )
-        and CJ.ZONA = ${zona}
+        and CJ.ZONA = :zona
         and CJ.VERSION = 0
       ORDER BY CJ.CCOSTO, CJ.fechasys, CJ.loginregistro, CJ.prs_documento`,
-      [],
+      { fecha1, fecha2, zona },
       { timeout: 60000 }
     );
 

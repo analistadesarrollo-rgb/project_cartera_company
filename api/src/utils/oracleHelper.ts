@@ -9,7 +9,7 @@ const DEFAULT_QUERY_TIMEOUT = 60000; // 60 segundos
 export async function executeWithTimeout<T>(
     connection: Connection,
     sql: string,
-    binds: any[] = [],
+    binds: any[] | Record<string, any> = [],
     options: { timeout?: number; fetchArraySize?: number } = {}
 ): Promise<Result<T>> {
     const timeout = options.timeout || DEFAULT_QUERY_TIMEOUT;
