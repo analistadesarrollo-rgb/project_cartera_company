@@ -7,8 +7,6 @@ import { reportRecaudo } from '../services/report.recaudos';
 export const getRecaudo = async (req: Request, res: Response) => {
   const { id, estado } = req.params;
   try {
-    await Recaudo.sync();
-
     const result = await Recaudo.findOne({
       where: {
         VINCULADO: id as string,
@@ -82,7 +80,7 @@ export const getReportOracle = async (req: Request, res: Response) => {
 
   const formattedDate1 = fecha.split('-').reverse().join('/');
   const formattedDate2 = fecha2.split('-').reverse().join('/');
-  
+
   try {
     const { rows, metaData } = await reportConsolidadoVenta(formattedDate1, formattedDate2, documento);
 
@@ -101,7 +99,7 @@ export const getReportOracle = async (req: Request, res: Response) => {
 
 
 export const getReportOracleRecaudo = async (req: Request, res: Response) => {
-  const { fecha, fecha2, zona} = req.body;
+  const { fecha, fecha2, zona } = req.body;
 
   if (!fecha || !fecha2 || !zona) {
     return res.status(400).json({ message: 'Falta fecha o documento, verificar estos datos' });

@@ -3,7 +3,6 @@ import { Request, Response } from 'express'
 
 export async function GetSellers(req: Request, res: Response) {
   try {
-    await Sellers.sync()
     const sellers = await Sellers.findAll()
 
     return res.status(200).json(sellers)

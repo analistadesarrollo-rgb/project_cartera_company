@@ -7,6 +7,19 @@ oracledb.initOracleClient({ libDir: DB_ORACLE_DIR });
 let naosPool: Pool | null = null;
 
 export async function getNaosPool(): Promise<Pool> {
+  // Si el pool existe pero está cerrado, recrearlo
+  if (naosPool) {
+    try {
+      if (naosPool.status === oracledb.POOL_STATUS_DRAINING ||
+        naosPool.status === oracledb.POOL_STATUS_CLOSED) {
+        console.log('[Oracle] Pool NAOS cerrado, recreando...');
+        naosPool = null;
+      }
+    } catch {
+      naosPool = null;
+    }
+  }
+
   if (!naosPool) {
     console.log('[Oracle] Creando pool de conexiones NAOS...');
     naosPool = await oracledb.createPool({
@@ -17,7 +30,10 @@ export async function getNaosPool(): Promise<Pool> {
       poolAlias: 'oracleNaos',
       poolMin: 2,
       poolMax: 10,
-      poolIncrement: 1
+      poolIncrement: 1,
+      poolTimeout: 60,
+      queueTimeout: 30000,
+      poolPingInterval: 60,
     });
     console.log('[Oracle] Pool NAOS creado exitosamente');
   }

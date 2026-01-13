@@ -7,7 +7,6 @@ import { fn } from 'sequelize';
 
 export const getAllBases = async (req: Request, res: Response) => {
   try {
-    await Bases.sync()
     const result = await Bases.findAll({
       include: {
         attributes: ['NOMBRES'],
@@ -25,8 +24,6 @@ export const getAllBases = async (req: Request, res: Response) => {
 export const getBaseDatalle = async (req: Request, res: Response) => {
   const { id } = req.params
   try {
-    await Bases.sync()
-
     const result = await Bases.findOne({
       where: {
         VINCULADO: id
@@ -61,9 +58,6 @@ export const updateBase = async (req: Request, res: Response) => {
   }
 
   try {
-
-    await Bases.sync()
-
     const result = await Bases.update({
       BASE: BASE === null ? BASE_ACT : BASE,
       RASPE: RASPE === null ? RASPE_ACT : RASPE,
@@ -78,8 +72,6 @@ export const updateBase = async (req: Request, res: Response) => {
     if (result[0] === 0) {
       return res.status(400).json({ msg: 'No se pudo actualizar la base' })
     }
-
-    await Aud_Bases.sync()
 
     await Aud_Bases.create({
       VINCULADO: VINCULADO,
@@ -103,8 +95,6 @@ export const updateBase = async (req: Request, res: Response) => {
 export const basesInfoUpdates = async (req: Request, res: Response) => {
   const { id } = req.params
   try {
-    await Aud_Bases.sync()
-
     const result = await Aud_Bases.findAll({
       where: {
         VINCULADO: id
@@ -113,7 +103,7 @@ export const basesInfoUpdates = async (req: Request, res: Response) => {
     })
 
     const reverseResult = result.reverse()
-    
+
     return res.status(200).json(reverseResult)
   } catch (error) {
     console.log(error);
@@ -124,8 +114,8 @@ export const basesInfoUpdates = async (req: Request, res: Response) => {
 export const usersSinBase = async (req: Request, res: Response) => {
   try {
     const resulst = await Cartera.findAll({
-      attributes:['EMPRESA', 'CUENTA', 'VINCULADO'],
-      where: {FECHA: fn('CURDATE')},
+      attributes: ['EMPRESA', 'CUENTA', 'VINCULADO'],
+      where: { FECHA: fn('CURDATE') },
       include: [
         {
           attributes: ['NOMBRES'],
@@ -139,7 +129,7 @@ export const usersSinBase = async (req: Request, res: Response) => {
         }
       ],
     })
-   
+
     const userSinBase = resulst.filter((item: any) => item.Basis === null);
     return res.status(200).json(userSinBase)
   } catch (error) {
@@ -150,9 +140,8 @@ export const usersSinBase = async (req: Request, res: Response) => {
 
 export const crearBase = async (req: Request, res: Response) => {
   const { base, raspa, vinculado, login } = req.body
-  
+
   try {
-    await Bases.sync()
     const result = await Bases.create({
       BASE: base,
       RASPE: raspa,
@@ -164,7 +153,7 @@ export const crearBase = async (req: Request, res: Response) => {
       VERSION: '0'
     })
 
-    if(result === null) {
+    if (result === null) {
       return res.status(400).json('No se pudo crear la base')
     }
 

@@ -34,8 +34,32 @@ app.use(VERSION, CarteraRouter)
   .use(VERSION, routerResumen)
   .use(VERSION, recaudoRouter)
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`[API] Server is running at http://localhost:${PORT}`)
   console.log(`[API] Version: ${VERSION}`)
   console.log(`[API] Health check: http://localhost:${PORT}/health`)
 })
+
+// Graceful shutdown - cerrar conexiones correctamente
+const gracefulShutdown = async (signal: string) => {
+  console.log(`[API] ${signal} recibido. Cerrando conexiones...`)
+
+  server.close(async () => {
+    try {
+      await conection.close()
+      console.log('[MySQL] Conexión cerrada correctamente')
+    } catch (error) {
+      console.error('[MySQL] Error al cerrar conexión:', error)
+    }
+    process.exit(0)
+  })
+
+  // Si no cierra en 10s, forzar salida
+  setTimeout(() => {
+    console.error('[API] Forzando cierre después de timeout')
+    process.exit(1)
+  }, 10000)
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

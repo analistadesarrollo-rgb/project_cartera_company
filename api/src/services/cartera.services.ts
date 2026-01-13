@@ -1,7 +1,7 @@
 import { Bases, Cartera, Sellers } from '../model'
 import { col, fn, Op, where } from 'sequelize';
 
-const carAttr: (keyof Cartera)[] = ['EMPRESA', 'VINCULADO', 'SALDO_ANT', 'DEBITO', 'CREDITO', 'NUEVOSALDO', 'RECHAZADOS', 'ACEPTADOS', 'DIGITADOS', 'VTABNET', 'VTASIISS' ,'VTASFLEX', 'VTA_S1', 'PENDIENTES_CONT']
+const carAttr: (keyof Cartera)[] = ['EMPRESA', 'VINCULADO', 'SALDO_ANT', 'DEBITO', 'CREDITO', 'NUEVOSALDO', 'RECHAZADOS', 'ACEPTADOS', 'DIGITADOS', 'VTABNET', 'VTASIISS', 'VTASFLEX', 'VTA_S1', 'PENDIENTES_CONT']
 const sellAttr: (keyof Sellers)[] = ['NOMBRES', 'NOMBRECARGO', 'CCOSTO']
 const baseAttr: (keyof Bases)[] = ['BASE', 'RASPE']
 
@@ -26,7 +26,6 @@ function empFilter(empresa: string) {
 }
 
 export async function CarteraDataServices(empresa: string, abs: boolean) {
-  await Cartera.sync();
   return await Cartera.findAll({
     attributes: carAttr,
     where: {

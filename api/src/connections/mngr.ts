@@ -7,6 +7,19 @@ oracledb.initOracleClient({ libDir: DB_ORACLE_DIR });
 let mngrPool: Pool | null = null;
 
 export async function getMngrPool(): Promise<Pool> {
+  // Si el pool existe pero está cerrado, recrearlo
+  if (mngrPool) {
+    try {
+      if (mngrPool.status === oracledb.POOL_STATUS_DRAINING ||
+        mngrPool.status === oracledb.POOL_STATUS_CLOSED) {
+        console.log('[Oracle] Pool Manager cerrado, recreando...');
+        mngrPool = null;
+      }
+    } catch {
+      mngrPool = null;
+    }
+  }
+
   if (!mngrPool) {
     console.log('[Oracle] Creando pool de conexiones Manager...');
     mngrPool = await oracledb.createPool({
@@ -17,7 +30,10 @@ export async function getMngrPool(): Promise<Pool> {
       poolAlias: 'oracleMngr',
       poolMin: 2,
       poolMax: 10,
-      poolIncrement: 1
+      poolIncrement: 1,
+      poolTimeout: 60,
+      queueTimeout: 30000,
+      poolPingInterval: 60,
     });
     console.log('[Oracle] Pool Manager creado exitosamente');
   }

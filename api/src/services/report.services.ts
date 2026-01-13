@@ -44,7 +44,9 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
       WHERE 
         ${datesString}
         AND tvn.persona = :documento
-    `, [documento]);
+    `, [documento], {
+      fetchArraySize: 100,  // Optimizar fetch
+    });
 
     if (!rows || !metaData) {
       throw new Error('No se encontraron datos')

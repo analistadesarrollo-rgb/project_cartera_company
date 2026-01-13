@@ -23,8 +23,6 @@ interface DetalleRecaudo {
 
 export const getResumenCartera = async (): Promise<CarteraIR[]> => {
   try {
-    await Cartera.sync()
-
     const condicionesDeFiltrado = {
       FECHA: fn('CURDATE'),
       SALDO_ANT: { [Op.gt]: 0 },
@@ -52,7 +50,7 @@ export const getResumenCartera = async (): Promise<CarteraIR[]> => {
 export const getDetalleRecaudoServired = async () => {
   try {
     const result = await Recaudo.findAll({
-      attributes: ['ESTADO', [fn('SUM', col('VALOR')), 'Total'], [fn('COUNT', 1), 'Cantidad'] ],
+      attributes: ['ESTADO', [fn('SUM', col('VALOR')), 'Total'], [fn('COUNT', 1), 'Cantidad']],
       where: { FECHA: fn('CURDATE'), EMPRESA: 101 },
       group: ['ESTADO']
     })
@@ -67,7 +65,7 @@ export const getDetalleRecaudoServired = async () => {
 export const getDetalleRecaudoMultired = async () => {
   try {
     const result = await Recaudo.findAll({
-      attributes: ['ESTADO', [fn('SUM', col('VALOR')), 'Total'], [fn('COUNT', 1), 'Cantidad'] ],
+      attributes: ['ESTADO', [fn('SUM', col('VALOR')), 'Total'], [fn('COUNT', 1), 'Cantidad']],
       where: { FECHA: fn('CURDATE'), EMPRESA: 102 },
       group: ['ESTADO']
     })
@@ -83,17 +81,17 @@ export const getCarteraXhoras = async (fecha?: string) => {
   try {
     // Validar y preparar la fecha
     let fechaFiltro;
-    
+
     if (fecha && fecha.trim() !== '') {
       // Validar formato de fecha (YYYY-MM-DD)
       const fechaLimpia = fecha.trim();
       const formatoFechaValido = /^\d{4}-\d{2}-\d{2}$/.test(fechaLimpia);
-      
+
       if (formatoFechaValido) {
         // Validar que sea una fecha válida
         const fechaObj = new Date(fechaLimpia);
         const esValidaFecha = !isNaN(fechaObj.getTime()) && fechaLimpia === fechaObj.toISOString().split('T')[0];
-        
+
         fechaFiltro = esValidaFecha ? fechaLimpia : fn('CURDATE');
       } else {
         // Si el formato no es válido, usar fecha actual
@@ -120,18 +118,18 @@ export const getCarteraXhoras = async (fecha?: string) => {
     // Agrupar resultados por empresa
     const empresasData = results.reduce((acc, item) => {
       const nombreEmpresa = item.EMPRESA === '101' ? 'Servired' : 'Multired'
-      
+
       if (!acc[nombreEmpresa]) {
         acc[nombreEmpresa] = []
       }
-      
+
       acc[nombreEmpresa].push({
         HORA: item.HORA,
         VLR_CA: item.VLR_CA,
         VLR_CI: item.VLR_CI,
         VLR_CT: item.VLR_CT,
       })
-      
+
       return acc
     }, {} as Record<string, any[]>)
 
