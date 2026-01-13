@@ -1,6 +1,7 @@
 import { CarteraDataServices } from '../services/cartera.services'
 import { mapCarteraResults } from '../utils/funtions';
 import { getMngrPool } from '../connections/mngr'
+import { executeWithTimeout, getConnectionSafe } from '../utils/oracleHelper';
 import { Request, Response } from 'express'
 import { Bases, Cartera, Sellers } from '../model';
 import { z } from 'zod';
@@ -92,12 +93,13 @@ export const getReportMngr = async (req: Request, res: Response) => {
 
     const SQL_CODES = SellerPowerBi.CCOSTO === '39632' ? CODIGOS_SERVIRED : CODIGO_MULTIRED;
 
-    const pool = await getMngrPool();
+    // Obtener conexión con verificación
+    connetion = await getConnectionSafe(getMngrPool, 'oracleMngr');
 
-    connetion = await pool.getConnection();
-
-    const { rows, metaData } = await connetion.execute<RowType[][]>(`
-      SELECT
+    // Ejecutar con timeout de 60 segundos
+    const { rows, metaData } = await executeWithTimeout<RowType[][]>(
+      connetion,
+      `SELECT
       mcnfecha fecha, mcncuenta cuenta, mcnEmpresa empresa, mcnVincula vinculado, 
       SUM (case when (mn.mcntipodoc not in (${SQL_CODES})) then mcnvaldebi else 0 end) INGRESOS, 
       SUM (case when (mn.mcntipodoc not in (${SQL_CODES})) then mcnvalcred else 0 end) EGRESOS,
@@ -109,8 +111,10 @@ export const getReportMngr = async (req: Request, res: Response) => {
       AND (mcntpreg = 0 or mcntpreg = 1 or mcntpreg = 2 or mcntpreg > 6)
       AND mcnVincula = :documento
       GROUP BY mcnfecha, mcncuenta, mcnEmpresa, mcnVincula
-      ORDER BY mcnfecha
-    `, [frmDate1, frmDate2, vinculado]);
+      ORDER BY mcnfecha`,
+      [frmDate1, frmDate2, vinculado],
+      { timeout: 60000 }
+    );
 
     const data = rows?.map(row => {
       return metaData?.reduce((acc, meta, index) => {

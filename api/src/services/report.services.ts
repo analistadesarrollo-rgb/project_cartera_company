@@ -1,22 +1,22 @@
 import { getOraclePool } from '../connections/oracledb';
+import { executeWithTimeout, getConnectionSafe } from '../utils/oracleHelper';
 import { RowType } from '../types/interface';
 import { Connection } from 'oracledb';
 
 const FunBetweenDates = (startDate: string, endDate: string) => `tvn.fecha BETWEEN TO_DATE('${startDate}', 'DD/MM/YYYY') AND TO_DATE('${endDate}', 'DD/MM/YYYY')`;
 
-export async function reportConsolidadoVenta(fecha1: string, fecha2: string, documento: number,) {
+export async function reportConsolidadoVenta(fecha1: string, fecha2: string, documento: number) {
   let connection: Connection | undefined;
-
   const datesString = FunBetweenDates(fecha1, fecha2);
 
-  const pool = await getOraclePool();
-
-  connection = await pool.getConnection();
-
-  // !! revisar la query 
   try {
-    const { rows, metaData } = await connection.execute<RowType[]>(`
-      SELECT 
+    // Obtener conexión con verificación
+    connection = await getConnectionSafe(getOraclePool, 'oracleMain');
+
+    // Ejecutar con timeout de 60 segundos
+    const { rows, metaData } = await executeWithTimeout<RowType[]>(
+      connection,
+      `SELECT 
         tvn.fecha, 
         tvn.persona, 
         UPPER(pe.nombres || ' ' || pe.apellido1 || ' ' || pe.apellido2) AS nombres, 
@@ -43,27 +43,26 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
         info_puntosventa_cem ipv ON ipv.codigo = tvn.SUCURSAL
       WHERE 
         ${datesString}
-        AND tvn.persona = :documento
-    `, [documento], {
-      fetchArraySize: 100,  // Optimizar fetch
-    });
+        AND tvn.persona = :documento`,
+      [documento],
+      { timeout: 60000 }
+    );
 
     if (!rows || !metaData) {
-      throw new Error('No se encontraron datos')
+      throw new Error('No se encontraron datos');
     }
 
-    return { rows, metaData }
+    return { rows, metaData };
   } catch (error) {
-    console.log(error);
-    throw new Error('Error al intentar obtener los datos');
+    console.error('[Oracle] Error en reportConsolidadoVenta:', error);
+    throw error;
   } finally {
     if (connection) {
       try {
         await connection.close();
       } catch (closeError) {
-        console.error('Error closing connection', closeError);
+        console.error('[Oracle] Error closing connection:', closeError);
       }
     }
   }
-
 }
