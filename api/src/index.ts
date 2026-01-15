@@ -10,6 +10,7 @@ import { routerResumen } from './routes/resumen.routes'
 import { CARTERA_FRONTEND, PORT, VERSION } from './config'
 import { conection } from './connections'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
+import { requestTimeout } from './middleware/requestTimeout'
 
 const app = express()
 
@@ -32,6 +33,10 @@ app.use(limiter)
 // ======== PERFORMANCE ========
 // Compresión de respuestas
 app.use(compression())
+
+// ======== TIMEOUT HTTP ========
+// Middleware que garantiza respuesta en 90 segundos máximo
+app.use(requestTimeout(90000))
 
 // ======== MIDDLEWARE BÁSICO ========
 app.disable('x-powered-by')
@@ -76,7 +81,12 @@ const server = app.listen(PORT, () => {
   console.log(`[API] Version: ${VERSION}`)
   console.log(`[API] Health check: http://localhost:${PORT}/health`)
   console.log(`[API] Security: helmet, rate-limit (200/15min), compression enabled`)
+  console.log(`[API] Request timeout: 90s`)
 })
+
+// Configurar timeouts del servidor
+server.timeout = 95000          // 95s - timeout general del servidor
+server.keepAliveTimeout = 65000 // 65s - timeout para conexiones keep-alive
 
 // ======== GRACEFUL SHUTDOWN ========
 const gracefulShutdown = async (signal: string) => {

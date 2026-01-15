@@ -3,20 +3,31 @@ import { Connection, Result } from 'oracledb';
 const DEFAULT_QUERY_TIMEOUT = 30000; // 30 segundos (reducido para respuesta más rápida)
 
 /**
+ * Resultado de executeWithTimeout incluyendo flag de conexión cerrada
+ */
+export interface ExecuteResult<T> {
+    result: Result<T>;
+    connectionClosed: boolean;
+}
+
+/**
  * Ejecuta una query Oracle con timeout ACTIVO usando connection.break().
  * Si la query tarda más del timeout, CANCELA la query en Oracle y libera la conexión.
+ * 
+ * @returns ExecuteResult con el resultado y flag indicando si la conexión fue cerrada
  */
 export async function executeWithTimeout<T>(
     connection: Connection,
     sql: string,
     binds: any[] | Record<string, any> = [],
     options: { timeout?: number; fetchArraySize?: number } = {}
-): Promise<Result<T>> {
+): Promise<ExecuteResult<T>> {
     const timeout = options.timeout || DEFAULT_QUERY_TIMEOUT;
 
     let timeoutId: NodeJS.Timeout | undefined;
     let isTimedOut = false;
     let queryFinished = false;
+    let connectionClosed = false;
 
     // Crear promise que cancelará activamente la query después del timeout
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -46,18 +57,22 @@ export async function executeWithTimeout<T>(
         const result = await Promise.race([queryPromise, timeoutPromise]);
         queryFinished = true;
 
-        return result;
+        return { result, connectionClosed: false };
     } catch (error) {
         // Si fue timeout, cerrar la conexión para liberarla al pool
         if (isTimedOut) {
             try {
                 await connection.close();
+                connectionClosed = true;
                 console.log('[Oracle] Conexión cerrada después de timeout');
             } catch (closeError) {
                 console.error('[Oracle] Error cerrando conexión:', closeError);
             }
         }
-        throw error;
+        // Re-lanzar el error con el flag de conexión cerrada
+        const enhancedError = error as Error & { connectionClosed?: boolean };
+        enhancedError.connectionClosed = connectionClosed;
+        throw enhancedError;
     } finally {
         if (timeoutId) {
             clearTimeout(timeoutId);
@@ -112,7 +127,7 @@ export async function executeWithRetry<T>(
     sql: string,
     binds: any[] | Record<string, any> = [],
     options: { timeout?: number; maxRetries?: number } = {}
-): Promise<Result<T>> {
+): Promise<ExecuteResult<T>> {
     const maxRetries = options.maxRetries || 2;
     let lastError: Error | undefined;
 
@@ -132,3 +147,4 @@ export async function executeWithRetry<T>(
 
     throw lastError;
 }
+

@@ -101,19 +101,30 @@ export const getReportOracle = async (req: Request, res: Response) => {
 export const getReportOracleRecaudo = async (req: Request, res: Response) => {
   const { fecha, fecha2, zona } = req.body;
 
+  // Timeout de seguridad a nivel de controlador (80s < timeout HTTP de 90s)
+  let controllerTimeoutFired = false;
+  const controllerTimeout = setTimeout(() => {
+    controllerTimeoutFired = true;
+    if (!res.headersSent) {
+      console.error('[Controller] Timeout en getReportOracleRecaudo después de 80s');
+      return res.status(504).json({ message: 'Tiempo de espera agotado en consulta Oracle' });
+    }
+  }, 80000);
+
   if (!fecha || !fecha2 || !zona) {
+    clearTimeout(controllerTimeout);
     return res.status(400).json({ message: 'Falta fecha o documento, verificar estos datos' });
   }
-
 
   // calcular que entre la fecha 1 y la fecha 2 no pase mas de 61 dias
   const date1 = new Date(fecha);
   const date2 = new Date(fecha2);
-  zona
+
   const diffTime = Math.abs(date2.getTime() - date1.getTime());
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays > 61) {
+    clearTimeout(controllerTimeout);
     return res.status(400).json({ message: 'El rango de fechas no puede ser mayor a 62 días' });
   }
 
@@ -123,6 +134,14 @@ export const getReportOracleRecaudo = async (req: Request, res: Response) => {
   try {
     const { rows, metaData } = await reportRecaudo(formattedDate1, formattedDate2, zona);
 
+    // Limpiar timeout si la consulta tuvo éxito
+    clearTimeout(controllerTimeout);
+
+    // Verificar si el timeout ya respondió
+    if (controllerTimeoutFired || res.headersSent) {
+      return;
+    }
+
     const data = rows.map(row => {
       return metaData?.reduce((acc, meta, index) => {
         acc[meta.name.toLowerCase()] = row[index];
@@ -131,7 +150,16 @@ export const getReportOracleRecaudo = async (req: Request, res: Response) => {
     });
     return res.status(200).json(data);
   } catch (error) {
-    console.error(error);
+    clearTimeout(controllerTimeout);
+
+    // Si el timeout ya respondió, no intentar responder de nuevo
+    if (controllerTimeoutFired || res.headersSent) {
+      console.error('[Controller] Error después de timeout en getReportOracleRecaudo:', error);
+      return;
+    }
+
+    console.error('[Controller] Error en getReportOracleRecaudo:', error);
     return res.status(500).json({ message: 'Error en getReportOracleRecaudo' });
   }
 }
+

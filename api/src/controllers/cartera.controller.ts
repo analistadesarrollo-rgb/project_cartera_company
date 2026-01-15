@@ -67,6 +67,7 @@ export const getReportMngr = async (req: Request, res: Response) => {
   const frmDate2 = fecha2.split('-').reverse().join('/');
 
   let connetion;
+  let connectionClosedByTimeout = false;
 
   try {
 
@@ -97,7 +98,7 @@ export const getReportMngr = async (req: Request, res: Response) => {
     connetion = await getConnectionSafe(getMngrPool, 'oracleMngr');
 
     // Ejecutar con timeout de 60 segundos
-    const { rows, metaData } = await executeWithTimeout<RowType[][]>(
+    const { result, connectionClosed } = await executeWithTimeout<RowType[][]>(
       connetion,
       `SELECT
       mcnfecha fecha, mcncuenta cuenta, mcnEmpresa empresa, mcnVincula vinculado, 
@@ -116,20 +117,30 @@ export const getReportMngr = async (req: Request, res: Response) => {
       { timeout: 60000 }
     );
 
-    const data = rows?.map(row => {
+    connectionClosedByTimeout = connectionClosed;
+    const { rows, metaData } = result;
+
+    const oracleData = rows?.map(row => {
       return metaData?.reduce((acc, meta, index) => {
         acc[meta.name.toLowerCase()] = row[index];
         return acc;
       }, {} as Record<string | number, any>);
     });
 
-    res.status(200).json({ cartera: data, CarteraInicial, Seller: SellerPowerBi, base: base?.BASE || 0 });
+    res.status(200).json({ cartera: oracleData, CarteraInicial, Seller: SellerPowerBi, base: base?.BASE || 0 });
   } catch (error) {
+    // Verificar si el error ya cerró la conexión (timeout)
+    const enhancedError = error as Error & { connectionClosed?: boolean };
+    if (enhancedError.connectionClosed) {
+      connectionClosedByTimeout = true;
+    }
     console.error(error);
     res.status(500).json({ message: 'Internal server error', error });
   } finally {
-    if (connetion) {
+    // Solo cerrar si la conexión existe y NO fue cerrada por timeout
+    if (connetion && !connectionClosedByTimeout) {
       connetion.close();
     }
   }
 }
+

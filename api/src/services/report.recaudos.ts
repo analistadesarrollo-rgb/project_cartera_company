@@ -5,13 +5,14 @@ import { Connection } from 'oracledb';
 
 export async function reportRecaudo(fecha1: string, fecha2: string, zona: string) {
   let connection: Connection | undefined;
+  let connectionClosedByTimeout = false;
 
   try {
     // Obtener conexión con verificación
     connection = await getConnectionSafe(getNaosPool, 'oracleNaos');
 
     // Ejecutar con timeout de 60 segundos - usando parámetros bind para seguridad
-    const { rows, metaData } = await executeWithTimeout<RowType[]>(
+    const { result, connectionClosed } = await executeWithTimeout<RowType[]>(
       connection,
       `SELECT 
         CJ.FECHA,
@@ -65,16 +66,25 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
       { timeout: 60000 }
     );
 
+    connectionClosedByTimeout = connectionClosed;
+    const { rows, metaData } = result;
+
     if (!rows || !metaData) {
       throw new Error('No se encontraron datos');
     }
 
     return { rows, metaData };
   } catch (error) {
+    // Verificar si el error ya cerró la conexión (timeout)
+    const enhancedError = error as Error & { connectionClosed?: boolean };
+    if (enhancedError.connectionClosed) {
+      connectionClosedByTimeout = true;
+    }
     console.error('[Oracle] Error en reportRecaudo:', error);
     throw error;
   } finally {
-    if (connection) {
+    // Solo cerrar si la conexión existe y NO fue cerrada por timeout
+    if (connection && !connectionClosedByTimeout) {
       try {
         await connection.close();
       } catch (closeError) {
@@ -83,3 +93,4 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
     }
   }
 }
+

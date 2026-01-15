@@ -7,6 +7,7 @@ const FunBetweenDates = (startDate: string, endDate: string) => `tvn.fecha BETWE
 
 export async function reportConsolidadoVenta(fecha1: string, fecha2: string, documento: number) {
   let connection: Connection | undefined;
+  let connectionClosedByTimeout = false;
   const datesString = FunBetweenDates(fecha1, fecha2);
 
   try {
@@ -14,7 +15,7 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
     connection = await getConnectionSafe(getOraclePool, 'oracleMain');
 
     // Ejecutar con timeout de 60 segundos
-    const { rows, metaData } = await executeWithTimeout<RowType[]>(
+    const { result, connectionClosed } = await executeWithTimeout<RowType[]>(
       connection,
       `SELECT 
         tvn.fecha, 
@@ -48,16 +49,25 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
       { timeout: 60000 }
     );
 
+    connectionClosedByTimeout = connectionClosed;
+    const { rows, metaData } = result;
+
     if (!rows || !metaData) {
       throw new Error('No se encontraron datos');
     }
 
     return { rows, metaData };
   } catch (error) {
+    // Verificar si el error ya cerró la conexión (timeout)
+    const enhancedError = error as Error & { connectionClosed?: boolean };
+    if (enhancedError.connectionClosed) {
+      connectionClosedByTimeout = true;
+    }
     console.error('[Oracle] Error en reportConsolidadoVenta:', error);
     throw error;
   } finally {
-    if (connection) {
+    // Solo cerrar si la conexión existe y NO fue cerrada por timeout
+    if (connection && !connectionClosedByTimeout) {
       try {
         await connection.close();
       } catch (closeError) {
@@ -66,3 +76,4 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
     }
   }
 }
+
