@@ -3,13 +3,22 @@ import { executeWithTimeout, getConnectionSafe } from '../utils/oracleHelper';
 import { RowType } from '../types/interface';
 import { Connection } from 'oracledb';
 
+/**
+ * Ejecuta la consulta de recaudo con timeouts robustos.
+ * Ahora incluye logging extensivo para diagnóstico.
+ */
 export async function reportRecaudo(fecha1: string, fecha2: string, zona: string) {
   let connection: Connection | undefined;
   let connectionClosedByTimeout = false;
+  let requestId = '';
 
   try {
-    // Obtener conexión con verificación
-    connection = await getConnectionSafe(getNaosPool, 'oracleNaos');
+    // Obtener conexión con timeout explícito de 15 segundos
+    const connResult = await getConnectionSafe(getNaosPool, 'oracleNaos');
+    connection = connResult.connection;
+    requestId = connResult.requestId;
+
+    console.log(`[${requestId}] Ejecutando reportRecaudo para zona ${zona}`);
 
     // Ejecutar con timeout de 60 segundos - usando parámetros bind para seguridad
     const { result, connectionClosed } = await executeWithTimeout<RowType[]>(
@@ -63,7 +72,7 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
         and CJ.VERSION = 0
       ORDER BY CJ.CCOSTO, CJ.fechasys, CJ.loginregistro, CJ.prs_documento`,
       { fecha1, fecha2, zona },
-      { timeout: 60000 }
+      { timeout: 60000, requestId }
     );
 
     connectionClosedByTimeout = connectionClosed;
@@ -73,24 +82,24 @@ export async function reportRecaudo(fecha1: string, fecha2: string, zona: string
       throw new Error('No se encontraron datos');
     }
 
+    console.log(`[${requestId}] reportRecaudo completado: ${rows.length} filas`);
     return { rows, metaData };
   } catch (error) {
-    // Verificar si el error ya cerró la conexión (timeout)
     const enhancedError = error as Error & { connectionClosed?: boolean };
     if (enhancedError.connectionClosed) {
       connectionClosedByTimeout = true;
     }
-    console.error('[Oracle] Error en reportRecaudo:', error);
+    console.error(`[${requestId}] Error en reportRecaudo:`, error);
     throw error;
   } finally {
     // Solo cerrar si la conexión existe y NO fue cerrada por timeout
     if (connection && !connectionClosedByTimeout) {
       try {
         await connection.close();
+        console.log(`[${requestId}] Conexión cerrada normalmente`);
       } catch (closeError) {
-        console.error('[Oracle] Error closing connection:', closeError);
+        console.error(`[${requestId}] Error closing connection:`, closeError);
       }
     }
   }
 }
-

@@ -11,6 +11,8 @@ import { CARTERA_FRONTEND, PORT, VERSION } from './config'
 import { conection } from './connections'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { requestTimeout } from './middleware/requestTimeout'
+import { getOraclePool } from './connections/oracledb'
+import { getNaosPool } from './connections/oracledb.naos'
 
 const app = express()
 
@@ -61,6 +63,52 @@ app.get('/health', async (req, res) => {
     })
   } catch (error) {
     res.status(503).json({ status: 'error', mysql: 'disconnected' })
+  }
+})
+
+// ======== DEBUG: POOL STATUS ========
+// Endpoint para diagnosticar el estado de los pools de Oracle
+app.get('/debug/pool-status', async (req, res) => {
+  try {
+    const pools: Record<string, any> = {};
+
+    try {
+      const mainPool = await getOraclePool();
+      pools.oracleMain = {
+        connectionsOpen: mainPool.connectionsOpen,
+        connectionsInUse: mainPool.connectionsInUse,
+        poolMax: mainPool.poolMax,
+        poolMin: mainPool.poolMin,
+        status: mainPool.status,
+        isHealthy: mainPool.connectionsInUse < mainPool.poolMax
+      };
+    } catch (e) {
+      pools.oracleMain = { error: (e as Error).message };
+    }
+
+    try {
+      const naosPool = await getNaosPool();
+      pools.oracleNaos = {
+        connectionsOpen: naosPool.connectionsOpen,
+        connectionsInUse: naosPool.connectionsInUse,
+        poolMax: naosPool.poolMax,
+        poolMin: naosPool.poolMin,
+        status: naosPool.status,
+        isHealthy: naosPool.connectionsInUse < naosPool.poolMax
+      };
+    } catch (e) {
+      pools.oracleNaos = { error: (e as Error).message };
+    }
+
+    res.json({
+      timestamp: new Date().toISOString(),
+      pools,
+      warning: Object.values(pools).some((p: any) => p.connectionsInUse >= p.poolMax - 1)
+        ? '⚠️ ALERTA: Uno o más pools están casi agotados!'
+        : null
+    });
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
   }
 })
 

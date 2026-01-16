@@ -5,14 +5,23 @@ import { Connection } from 'oracledb';
 
 const FunBetweenDates = (startDate: string, endDate: string) => `tvn.fecha BETWEEN TO_DATE('${startDate}', 'DD/MM/YYYY') AND TO_DATE('${endDate}', 'DD/MM/YYYY')`;
 
+/**
+ * Ejecuta la consulta de consolidado de venta con timeouts robustos.
+ * Ahora incluye logging extensivo para diagnóstico.
+ */
 export async function reportConsolidadoVenta(fecha1: string, fecha2: string, documento: number) {
   let connection: Connection | undefined;
   let connectionClosedByTimeout = false;
+  let requestId = '';
   const datesString = FunBetweenDates(fecha1, fecha2);
 
   try {
-    // Obtener conexión con verificación
-    connection = await getConnectionSafe(getOraclePool, 'oracleMain');
+    // Obtener conexión con timeout explícito de 15 segundos
+    const connResult = await getConnectionSafe(getOraclePool, 'oracleMain');
+    connection = connResult.connection;
+    requestId = connResult.requestId;
+
+    console.log(`[${requestId}] Ejecutando reportConsolidadoVenta para documento ${documento}`);
 
     // Ejecutar con timeout de 60 segundos
     const { result, connectionClosed } = await executeWithTimeout<RowType[]>(
@@ -46,7 +55,7 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
         ${datesString}
         AND tvn.persona = :documento`,
       [documento],
-      { timeout: 60000 }
+      { timeout: 60000, requestId }
     );
 
     connectionClosedByTimeout = connectionClosed;
@@ -56,24 +65,24 @@ export async function reportConsolidadoVenta(fecha1: string, fecha2: string, doc
       throw new Error('No se encontraron datos');
     }
 
+    console.log(`[${requestId}] reportConsolidadoVenta completado: ${rows.length} filas`);
     return { rows, metaData };
   } catch (error) {
-    // Verificar si el error ya cerró la conexión (timeout)
     const enhancedError = error as Error & { connectionClosed?: boolean };
     if (enhancedError.connectionClosed) {
       connectionClosedByTimeout = true;
     }
-    console.error('[Oracle] Error en reportConsolidadoVenta:', error);
+    console.error(`[${requestId}] Error en reportConsolidadoVenta:`, error);
     throw error;
   } finally {
     // Solo cerrar si la conexión existe y NO fue cerrada por timeout
     if (connection && !connectionClosedByTimeout) {
       try {
         await connection.close();
+        console.log(`[${requestId}] Conexión cerrada normalmente`);
       } catch (closeError) {
-        console.error('[Oracle] Error closing connection:', closeError);
+        console.error(`[${requestId}] Error closing connection:`, closeError);
       }
     }
   }
 }
-

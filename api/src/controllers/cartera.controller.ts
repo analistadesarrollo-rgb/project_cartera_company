@@ -5,6 +5,7 @@ import { executeWithTimeout, getConnectionSafe } from '../utils/oracleHelper';
 import { Request, Response } from 'express'
 import { Bases, Cartera, Sellers } from '../model';
 import { z } from 'zod';
+import { Connection } from 'oracledb';
 
 const schema = z.object({
   fecha1: z.string(),
@@ -66,8 +67,9 @@ export const getReportMngr = async (req: Request, res: Response) => {
   const frmDate1 = fecha1.split('-').reverse().join('/');
   const frmDate2 = fecha2.split('-').reverse().join('/');
 
-  let connetion;
+  let connection: Connection | undefined;
   let connectionClosedByTimeout = false;
+  let requestId = '';
 
   try {
 
@@ -94,12 +96,16 @@ export const getReportMngr = async (req: Request, res: Response) => {
 
     const SQL_CODES = SellerPowerBi.CCOSTO === '39632' ? CODIGOS_SERVIRED : CODIGO_MULTIRED;
 
-    // Obtener conexión con verificación
-    connetion = await getConnectionSafe(getMngrPool, 'oracleMngr');
+    // Obtener conexión con timeout explícito de 15 segundos
+    const connResult = await getConnectionSafe(getMngrPool, 'oracleMngr');
+    connection = connResult.connection;
+    requestId = connResult.requestId;
+
+    console.log(`[${requestId}] Ejecutando getReportMngr para vinculado ${vinculado}`);
 
     // Ejecutar con timeout de 60 segundos
     const { result, connectionClosed } = await executeWithTimeout<RowType[][]>(
-      connetion,
+      connection,
       `SELECT
       mcnfecha fecha, mcncuenta cuenta, mcnEmpresa empresa, mcnVincula vinculado, 
       SUM (case when (mn.mcntipodoc not in (${SQL_CODES})) then mcnvaldebi else 0 end) INGRESOS, 
@@ -114,7 +120,7 @@ export const getReportMngr = async (req: Request, res: Response) => {
       GROUP BY mcnfecha, mcncuenta, mcnEmpresa, mcnVincula
       ORDER BY mcnfecha`,
       [frmDate1, frmDate2, vinculado],
-      { timeout: 60000 }
+      { timeout: 60000, requestId }
     );
 
     connectionClosedByTimeout = connectionClosed;
@@ -127,6 +133,7 @@ export const getReportMngr = async (req: Request, res: Response) => {
       }, {} as Record<string | number, any>);
     });
 
+    console.log(`[${requestId}] getReportMngr completado exitosamente`);
     res.status(200).json({ cartera: oracleData, CarteraInicial, Seller: SellerPowerBi, base: base?.BASE || 0 });
   } catch (error) {
     // Verificar si el error ya cerró la conexión (timeout)
@@ -134,13 +141,17 @@ export const getReportMngr = async (req: Request, res: Response) => {
     if (enhancedError.connectionClosed) {
       connectionClosedByTimeout = true;
     }
-    console.error(error);
-    res.status(500).json({ message: 'Internal server error', error });
+    console.error(`[${requestId}] Error en getReportMngr:`, error);
+    res.status(500).json({ message: 'Internal server error', error: (error as Error).message });
   } finally {
     // Solo cerrar si la conexión existe y NO fue cerrada por timeout
-    if (connetion && !connectionClosedByTimeout) {
-      connetion.close();
+    if (connection && !connectionClosedByTimeout) {
+      try {
+        await connection.close();
+        console.log(`[${requestId}] Conexión cerrada normalmente`);
+      } catch (closeError) {
+        console.error(`[${requestId}] Error closing connection:`, closeError);
+      }
     }
   }
 }
-
