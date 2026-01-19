@@ -15,18 +15,20 @@ services:
 
   api-cartera-v1:
     build: ./api
-    image: api-cartera:v1.2
+    image: api-cartera:v1.3
     container_name: api_cartera_v1
     restart: always
     networks:
       - red-gane-int
     environment:
       - TZ=America/Bogota
+    # Healthcheck que verifica TANTO MySQL como Oracle
+    # Si el pool de Oracle está agotado, el healthcheck falla y Docker reinicia el contenedor
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:80/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
+      test: [ "CMD", "node", "-e", "fetch('http://localhost:80/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))" ]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 15s
+      retries: 2
       start_period: 40s
 
 networks:

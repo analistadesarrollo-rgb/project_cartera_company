@@ -51,23 +51,122 @@ app.disable('x-powered-by')
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   }))
 
-// ======== HEALTH CHECK ========
+// ======== HEALTH CHECK (MySQL + Oracle) ========
+// Este endpoint es usado por Docker para determinar si el contenedor está saludable
 app.get('/health', async (req, res) => {
+  const startTime = Date.now();
+  const status: Record<string, any> = {
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  };
+
+  // Verificar MySQL
   try {
-    await conection.authenticate()
-    res.status(200).json({
-      status: 'ok',
-      mysql: 'connected',
-      timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
-    })
+    await conection.authenticate();
+    status.mysql = 'connected';
   } catch (error) {
-    res.status(503).json({ status: 'error', mysql: 'disconnected' })
+    status.mysql = 'disconnected';
+  }
+
+  // Verificar Oracle pools (sin intentar conexión, solo estado del pool)
+  try {
+    const mainPool = await getOraclePool();
+    const poolUsage = mainPool.connectionsInUse / mainPool.poolMax;
+    status.oracleMain = {
+      connectionsOpen: mainPool.connectionsOpen,
+      connectionsInUse: mainPool.connectionsInUse,
+      poolMax: mainPool.poolMax,
+      usage: `${Math.round(poolUsage * 100)}%`
+    };
+
+    // Si el pool está completamente agotado, es un problema serio
+    if (mainPool.connectionsInUse >= mainPool.poolMax) {
+      console.error('[HEALTH] ⚠️ CRÍTICO: Pool Oracle AGOTADO - todas las conexiones en uso!');
+      status.oracleMain.critical = true;
+    }
+  } catch (e) {
+    status.oracleMain = { error: (e as Error).message };
+  }
+
+  // Determinar si el contenedor está saludable
+  const isHealthy = status.mysql === 'connected' && !status.oracleMain?.critical;
+  status.status = isHealthy ? 'ok' : 'degraded';
+  status.responseTime = `${Date.now() - startTime}ms`;
+
+  res.status(isHealthy ? 200 : 503).json(status);
+})
+
+// ======== HEALTH CHECK ORACLE (para Docker) ========
+// Endpoint específico que verifica Oracle con timeout estricto
+app.get('/health/oracle', async (req, res) => {
+  const timeout = 10000; // 10 segundos máximo
+
+  try {
+    const result = await Promise.race([
+      (async () => {
+        const pool = await getOraclePool();
+
+        // Si el pool está agotado, fallar inmediatamente
+        if (pool.connectionsInUse >= pool.poolMax) {
+          throw new Error('Pool agotado');
+        }
+
+        // Intentar obtener una conexión con timeout
+        const connection = await Promise.race([
+          pool.getConnection(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('getConnection timeout')), 5000))
+        ]) as any;
+
+        // Hacer un ping rápido
+        await Promise.race([
+          connection.execute('SELECT 1 FROM DUAL'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ping timeout')), 3000))
+        ]);
+
+        await connection.close();
+        return { status: 'ok', pool: { open: pool.connectionsOpen, inUse: pool.connectionsInUse } };
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), timeout))
+    ]);
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('[HEALTH/ORACLE] Falló:', (error as Error).message);
+    res.status(503).json({ status: 'error', error: (error as Error).message });
   }
 })
 
+// ======== WATCHDOG: Auto-terminación si hay problemas irrecuperables ========
+let consecutivePoolExhausted = 0;
+const MAX_POOL_EXHAUSTED_COUNT = 3;
+
+setInterval(async () => {
+  try {
+    const pool = await getOraclePool();
+
+    if (pool.connectionsInUse >= pool.poolMax) {
+      consecutivePoolExhausted++;
+      console.warn(`[WATCHDOG] Pool agotado (${consecutivePoolExhausted}/${MAX_POOL_EXHAUSTED_COUNT})`);
+
+      if (consecutivePoolExhausted >= MAX_POOL_EXHAUSTED_COUNT) {
+        console.error('[WATCHDOG] ⚠️ TERMINANDO PROCESO - Pool agotado por demasiado tiempo');
+        console.error('[WATCHDOG] Docker reiniciará el contenedor automáticamente');
+
+        // Dar tiempo para que los logs se escriban
+        setTimeout(() => {
+          process.exit(1);
+        }, 1000);
+      }
+    } else {
+      consecutivePoolExhausted = 0; // Reset si el pool se recupera
+    }
+  } catch (e) {
+    // Si no podemos ni obtener el pool, hay un problema serio
+    console.error('[WATCHDOG] Error verificando pool:', (e as Error).message);
+  }
+}, 30000); // Verificar cada 30 segundos
+
 // ======== DEBUG: POOL STATUS ========
-// Endpoint para diagnosticar el estado de los pools de Oracle
 app.get('/debug/pool-status', async (req, res) => {
   try {
     const pools: Record<string, any> = {};
@@ -80,7 +179,8 @@ app.get('/debug/pool-status', async (req, res) => {
         poolMax: mainPool.poolMax,
         poolMin: mainPool.poolMin,
         status: mainPool.status,
-        isHealthy: mainPool.connectionsInUse < mainPool.poolMax
+        isHealthy: mainPool.connectionsInUse < mainPool.poolMax,
+        usage: `${Math.round((mainPool.connectionsInUse / mainPool.poolMax) * 100)}%`
       };
     } catch (e) {
       pools.oracleMain = { error: (e as Error).message };
@@ -94,7 +194,8 @@ app.get('/debug/pool-status', async (req, res) => {
         poolMax: naosPool.poolMax,
         poolMin: naosPool.poolMin,
         status: naosPool.status,
-        isHealthy: naosPool.connectionsInUse < naosPool.poolMax
+        isHealthy: naosPool.connectionsInUse < naosPool.poolMax,
+        usage: `${Math.round((naosPool.connectionsInUse / naosPool.poolMax) * 100)}%`
       };
     } catch (e) {
       pools.oracleNaos = { error: (e as Error).message };
@@ -102,6 +203,8 @@ app.get('/debug/pool-status', async (req, res) => {
 
     res.json({
       timestamp: new Date().toISOString(),
+      consecutivePoolExhausted,
+      maxBeforeRestart: MAX_POOL_EXHAUSTED_COUNT,
       pools,
       warning: Object.values(pools).some((p: any) => p.connectionsInUse >= p.poolMax - 1)
         ? '⚠️ ALERTA: Uno o más pools están casi agotados!'
