@@ -51,8 +51,9 @@ app.disable('x-powered-by')
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   }))
 
-// ======== HEALTH CHECK (MySQL + Oracle) ========
+// ======== HEALTH CHECK (MySQL + Oracle con conexión REAL) ========
 // Este endpoint es usado por Docker para determinar si el contenedor está saludable
+// IMPORTANTE: Ahora intenta obtener una conexión REAL de Oracle, no solo lee estadísticas
 app.get('/health', async (req, res) => {
   const startTime = Date.now();
   const status: Record<string, any> = {
@@ -60,39 +61,56 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
   };
 
+  let isHealthy = true;
+
   // Verificar MySQL
   try {
     await conection.authenticate();
     status.mysql = 'connected';
   } catch (error) {
     status.mysql = 'disconnected';
+    isHealthy = false;
   }
 
-  // Verificar Oracle pools (sin intentar conexión, solo estado del pool)
+  // Verificar Oracle - INTENTAR OBTENER UNA CONEXIÓN REAL
   try {
-    const mainPool = await getOraclePool();
-    const poolUsage = mainPool.connectionsInUse / mainPool.poolMax;
+    const pool = await getOraclePool();
     status.oracleMain = {
-      connectionsOpen: mainPool.connectionsOpen,
-      connectionsInUse: mainPool.connectionsInUse,
-      poolMax: mainPool.poolMax,
-      usage: `${Math.round(poolUsage * 100)}%`
+      connectionsOpen: pool.connectionsOpen,
+      connectionsInUse: pool.connectionsInUse,
+      poolMax: pool.poolMax,
     };
 
-    // Si el pool está completamente agotado, es un problema serio
-    if (mainPool.connectionsInUse >= mainPool.poolMax) {
-      console.error('[HEALTH] ⚠️ CRÍTICO: Pool Oracle AGOTADO - todas las conexiones en uso!');
-      status.oracleMain.critical = true;
-    }
+    // Intentar obtener conexión con timeout de 8 segundos
+    const connection = await Promise.race([
+      pool.getConnection(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('getConnection timeout 8s')), 8000)
+      )
+    ]) as any;
+
+    // Hacer un ping rápido
+    await Promise.race([
+      connection.execute('SELECT 1 FROM DUAL'),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('ping timeout')), 3000)
+      )
+    ]);
+
+    await connection.close();
+    status.oracleMain.connectionTest = 'ok';
   } catch (e) {
-    status.oracleMain = { error: (e as Error).message };
+    console.error('[HEALTH] ❌ Oracle falló:', (e as Error).message);
+    status.oracleMain = status.oracleMain || {};
+    status.oracleMain.connectionTest = 'failed';
+    status.oracleMain.error = (e as Error).message;
+    isHealthy = false; // CRÍTICO: marcar como no saludable
   }
 
-  // Determinar si el contenedor está saludable
-  const isHealthy = status.mysql === 'connected' && !status.oracleMain?.critical;
-  status.status = isHealthy ? 'ok' : 'degraded';
+  status.status = isHealthy ? 'ok' : 'unhealthy';
   status.responseTime = `${Date.now() - startTime}ms`;
 
+  // Si no es saludable, Docker reiniciará el contenedor
   res.status(isHealthy ? 200 : 503).json(status);
 })
 
