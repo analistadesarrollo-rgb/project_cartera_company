@@ -45,7 +45,7 @@ pipeline {
         stage('delete images'){
             steps{
                 script {
-                    def images = 'api-cartera:v1.2'
+                    def images = 'api-cartera:v1.3'
                     if (sh(script: "docker images -q ${images}", returnStdout: true).trim()) {
                         sh "docker rmi ${images}"
                     } else {
