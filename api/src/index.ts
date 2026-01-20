@@ -51,9 +51,9 @@ app.disable('x-powered-by')
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
   }))
 
-// ======== HEALTH CHECK (MySQL + Oracle con conexión REAL) ========
+// ======== HEALTH CHECK (MySQL + Oracle AMBOS POOLS) ========
 // Este endpoint es usado por Docker para determinar si el contenedor está saludable
-// IMPORTANTE: Ahora intenta obtener una conexión REAL de Oracle, no solo lee estadísticas
+// IMPORTANTE: Prueba AMBOS pools de Oracle (Main y Naos)
 app.get('/health', async (req, res) => {
   const startTime = Date.now();
   const status: Record<string, any> = {
@@ -72,39 +72,56 @@ app.get('/health', async (req, res) => {
     isHealthy = false;
   }
 
-  // Verificar Oracle - INTENTAR OBTENER UNA CONEXIÓN REAL
-  try {
-    const pool = await getOraclePool();
-    status.oracleMain = {
-      connectionsOpen: pool.connectionsOpen,
-      connectionsInUse: pool.connectionsInUse,
-      poolMax: pool.poolMax,
-    };
+  // Función helper para probar un pool
+  async function testPool(getPoolFn: () => Promise<any>, poolName: string): Promise<{ success: boolean; info: any }> {
+    try {
+      const pool = await getPoolFn();
+      const info: any = {
+        connectionsOpen: pool.connectionsOpen,
+        connectionsInUse: pool.connectionsInUse,
+        poolMax: pool.poolMax,
+      };
 
-    // Intentar obtener conexión con timeout de 8 segundos
-    const connection = await Promise.race([
-      pool.getConnection(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('getConnection timeout 8s')), 8000)
-      )
-    ]) as any;
+      // Intentar obtener conexión con timeout de 8 segundos
+      const connection = await Promise.race([
+        pool.getConnection(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('getConnection timeout 8s')), 8000)
+        )
+      ]) as any;
 
-    // Hacer un ping rápido
-    await Promise.race([
-      connection.execute('SELECT 1 FROM DUAL'),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('ping timeout')), 3000)
-      )
-    ]);
+      // Hacer un ping rápido
+      await Promise.race([
+        connection.execute('SELECT 1 FROM DUAL'),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('ping timeout')), 3000)
+        )
+      ]);
 
-    await connection.close();
-    status.oracleMain.connectionTest = 'ok';
-  } catch (e) {
-    console.error('[HEALTH] ❌ Oracle falló:', (e as Error).message);
-    status.oracleMain = status.oracleMain || {};
-    status.oracleMain.connectionTest = 'failed';
-    status.oracleMain.error = (e as Error).message;
-    isHealthy = false; // CRÍTICO: marcar como no saludable
+      await connection.close();
+      info.connectionTest = 'ok';
+      return { success: true, info };
+    } catch (e) {
+      console.error(`[HEALTH] ❌ ${poolName} falló:`, (e as Error).message);
+      return {
+        success: false,
+        info: { connectionTest: 'failed', error: (e as Error).message }
+      };
+    }
+  }
+
+  // Probar AMBOS pools Oracle en paralelo
+  const [mainResult, naosResult] = await Promise.all([
+    testPool(getOraclePool, 'oracleMain'),
+    testPool(getNaosPool, 'oracleNaos')
+  ]);
+
+  status.oracleMain = mainResult.info;
+  status.oracleNaos = naosResult.info;
+
+  // Si CUALQUIERA de los pools falla, marcar como no saludable
+  if (!mainResult.success || !naosResult.success) {
+    isHealthy = false;
   }
 
   status.status = isHealthy ? 'ok' : 'unhealthy';
