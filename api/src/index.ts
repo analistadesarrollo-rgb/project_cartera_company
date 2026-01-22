@@ -172,19 +172,53 @@ app.get('/health/oracle', async (req, res) => {
 })
 
 // ======== WATCHDOG: Auto-terminación si hay problemas irrecuperables ========
-let consecutivePoolExhausted = 0;
-const MAX_POOL_EXHAUSTED_COUNT = 3;
+// Este watchdog PRUEBA la conexión real, no solo lee estadísticas del pool
+let consecutiveFailures = 0;
+const MAX_CONSECUTIVE_FAILURES = 3;
+
+async function testPoolConnection(getPoolFn: () => Promise<any>, poolName: string): Promise<boolean> {
+  try {
+    const pool = await getPoolFn();
+
+    // Intentar obtener conexión con timeout de 5 segundos
+    const connection = await Promise.race([
+      pool.getConnection(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('getConnection timeout 5s')), 5000)
+      )
+    ]) as any;
+
+    // Hacer ping rápido
+    await Promise.race([
+      connection.execute('SELECT 1 FROM DUAL'),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('ping timeout')), 3000)
+      )
+    ]);
+
+    await connection.close();
+    return true;
+  } catch (e) {
+    console.error(`[WATCHDOG] ❌ ${poolName} falló:`, (e as Error).message);
+    return false;
+  }
+}
 
 setInterval(async () => {
   try {
-    const pool = await getOraclePool();
+    // Probar AMBOS pools
+    const [mainOk, naosOk] = await Promise.all([
+      testPoolConnection(getOraclePool, 'oracleMain'),
+      testPoolConnection(getNaosPool, 'oracleNaos')
+    ]);
 
-    if (pool.connectionsInUse >= pool.poolMax) {
-      consecutivePoolExhausted++;
-      console.warn(`[WATCHDOG] Pool agotado (${consecutivePoolExhausted}/${MAX_POOL_EXHAUSTED_COUNT})`);
+    if (!mainOk || !naosOk) {
+      consecutiveFailures++;
+      console.warn(`[WATCHDOG] ⚠️ Fallo de pool (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES})`);
+      console.warn(`[WATCHDOG] oracleMain: ${mainOk ? 'OK' : 'FALLO'}, oracleNaos: ${naosOk ? 'OK' : 'FALLO'}`);
 
-      if (consecutivePoolExhausted >= MAX_POOL_EXHAUSTED_COUNT) {
-        console.error('[WATCHDOG] ⚠️ TERMINANDO PROCESO - Pool agotado por demasiado tiempo');
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        console.error('[WATCHDOG] 🔴 TERMINANDO PROCESO - Pools fallando por demasiado tiempo');
         console.error('[WATCHDOG] Docker reiniciará el contenedor automáticamente');
 
         // Dar tiempo para que los logs se escriban
@@ -193,11 +227,14 @@ setInterval(async () => {
         }, 1000);
       }
     } else {
-      consecutivePoolExhausted = 0; // Reset si el pool se recupera
+      if (consecutiveFailures > 0) {
+        console.log('[WATCHDOG] ✅ Pools recuperados');
+      }
+      consecutiveFailures = 0; // Reset si ambos pools funcionan
     }
   } catch (e) {
-    // Si no podemos ni obtener el pool, hay un problema serio
-    console.error('[WATCHDOG] Error verificando pool:', (e as Error).message);
+    console.error('[WATCHDOG] Error crítico:', (e as Error).message);
+    consecutiveFailures++;
   }
 }, 30000); // Verificar cada 30 segundos
 
@@ -238,8 +275,8 @@ app.get('/debug/pool-status', async (req, res) => {
 
     res.json({
       timestamp: new Date().toISOString(),
-      consecutivePoolExhausted,
-      maxBeforeRestart: MAX_POOL_EXHAUSTED_COUNT,
+      consecutiveFailures,
+      maxBeforeRestart: MAX_CONSECUTIVE_FAILURES,
       pools,
       warning: Object.values(pools).some((p: any) => p.connectionsInUse >= p.poolMax - 1)
         ? '⚠️ ALERTA: Uno o más pools están casi agotados!'
