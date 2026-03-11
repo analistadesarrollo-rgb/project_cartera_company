@@ -39,7 +39,7 @@ export const getReportRecaudo = async (req: Request, res: Response) => {
     }
 
     const result = await Recaudo.findAll({
-      attributes: ['FECHA', 'VINCULADO', 'VALOR', 'ESTADO', 'NOTA_CONTEO', 'USR_CONTEO', 'HORA_CONTEO', 'EMPRESA'],
+      attributes: ['FECHA', 'VINCULADO', 'VALOR', 'ESTADO', 'NOTA_CONTEO', 'USR_CONTEO', 'HORA_CONTEO', 'EMPRESA', 'HORASYNC'],
       where: {
         ESTADO: { [Op.in]: ['u', 'r'] },
         FECHA: { [Op.between]: [fecha1, fecha2] },

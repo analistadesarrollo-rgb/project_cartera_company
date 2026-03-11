@@ -24,7 +24,8 @@ type RowType = [
   number,  // ingresos
   number,  // egresos
   number,  // abonos_cartera
-  number   // version
+  number,  // version
+  string   // hora_registro
 ];
 
 export const getCartera = async (req: Request, res: Response) => {
@@ -111,7 +112,8 @@ export const getReportMngr = async (req: Request, res: Response) => {
       SUM (case when (mn.mcntipodoc not in (${SQL_CODES})) then mcnvaldebi else 0 end) INGRESOS, 
       SUM (case when (mn.mcntipodoc not in (${SQL_CODES})) then mcnvalcred else 0 end) EGRESOS,
       SUM (case when (mn.mcntipodoc in (${SQL_CODES})) then mcnvalcred else 0 end) ABONOS_CARTERA,
-      0 VERSION
+      0 VERSION,
+      to_char(MIN(mn.mcnnewfec), 'DD/MM/YYYY HH24:MI:SS') hora_registro
       FROM manager.mngmcn mn
       WHERE mcncuenta = '13459501'
       And mcnfecha between TO_DATE(:fecha1, 'DD-MM-YYYY') and TO_DATE(:fecha2, 'DD-MM-YYYY')

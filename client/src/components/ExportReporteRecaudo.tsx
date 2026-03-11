@@ -16,7 +16,8 @@ const generateExcelData = (datos: DataReporte[]): unknown[] => {
       G: 'Hora conteo',
       H: 'Usuario conteo',
       I: 'Empresa',
-      J: 'Nota conteo'
+      J: 'Nota conteo',
+      K: 'Hora Registro BD'
     }
   ]
 
@@ -30,7 +31,8 @@ const generateExcelData = (datos: DataReporte[]): unknown[] => {
     G: it.HORA_CONTEO,
     H: it.USR_CONTEO,
     I: it.EMPRESA === '101' ? 'Servired' : it.EMPRESA === '102' ? 'Multired' : 'Sin Empresa Asignada',
-    J: it.NOTA_CONTEO
+    J: it.NOTA_CONTEO,
+    K: it.HORASYNC ?? ''
   }))
 
   return [...titulo, ...headers, ...rows]
@@ -45,7 +47,7 @@ const createExcelFile = (data: unknown[]): void => {
   const colWidths: ColInfo[] = [
     { width: 10 }, { width: 10 }, { width: 30 }, { width: 10 }, { width: 20 },
     { width: 10 }, { width: 10 }, { width: 20 }, { width: 10 }, { width: 10 },
-    { width: 10 }, { width: 10 }, { width: 10 }
+    { width: 10 }, { width: 10 }, { width: 10 }, { width: 20 }
   ]
 
   hoja['!cols'] = colWidths

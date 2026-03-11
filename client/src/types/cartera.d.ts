@@ -29,6 +29,7 @@ export interface MngrReport {
   egresos: number;
   abonos_cartera: number;
   version: number;
+  hora_registro?: string;
 }
 
 export interface Seller {
