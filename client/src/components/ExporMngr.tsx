@@ -16,13 +16,12 @@ const generateExcelData = (datos: MngrReport[], initial: number, base: number, i
       C: 'EGRESOS',
       D: 'SALDO DIA',
       E: 'ABONO CARTERA',
-      F: 'DIFERENCIA DIA',
-      G: 'HORA REGISTRO'
+      F: 'DIFERENCIA DIA'
     }
   ]
 
-  const initialRow = [{ H: 'Saldo Inicial', I: initial }]
-  const baseRow = [{ H: 'Base Asignada', I: base }]
+  const initialRow = [{ G: 'Saldo Inicial', H: initial }]
+  const baseRow = [{ G: 'Base Asignada', H: base }]
 
   const rows = datos.map((it) => ({
     A: it.fecha.split('T')[0],
@@ -30,8 +29,7 @@ const generateExcelData = (datos: MngrReport[], initial: number, base: number, i
     C: it.egresos,
     D: it.ingresos - it.egresos,
     E: it.abonos_cartera,
-    F: (it.ingresos - it.egresos) - it.abonos_cartera,
-    G: it.hora_registro ?? ''
+    F: (it.ingresos - it.egresos) - it.abonos_cartera
   }))
 
   return [...titulo, ...names, ...headers, ...initialRow, ...baseRow, ...rows]
@@ -42,11 +40,11 @@ const createExcelFile = (data: unknown[]): void => {
   const libro = utils.book_new()
   const hoja = utils.json_to_sheet(data, { skipHeader: true })
 
-  hoja['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }]
+  hoja['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }]
 
   const colWidths: ColInfo[] = [
     { width: 10 }, { width: 10 }, { width: 30 }, { width: 10 }, { width: 20 },
-    { width: 10 }, { width: 20 }, { width: 20 }, { width: 10 }, { width: 10 },
+    { width: 10 }, { width: 10 }, { width: 20 }, { width: 10 }, { width: 10 },
     { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 10 },
     { width: 10 }, { width: 10 }
   ]

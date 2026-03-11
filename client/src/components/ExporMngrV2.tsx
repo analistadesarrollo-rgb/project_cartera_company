@@ -23,12 +23,11 @@ const generateExcelData = (
     C: 'EGRESOS',
     D: 'SALDO DIA',
     E: 'ABONO CARTERA',
-    F: 'SALDO FINAL',
-    G: 'HORA REGISTRO'
+    F: 'SALDO FINAL'
   }]
 
-  const initialRow = [{ H: 'Saldo Inicial', I: initial }]
-  const baseRow = [{ H: 'Base Asignada', I: base }]
+  const initialRow = [{ G: 'Saldo Inicial', H: initial }]
+  const baseRow = [{ G: 'Base Asignada', H: base }]
 
   const startRow = 6 // primera fila de datos
 
@@ -49,10 +48,9 @@ const generateExcelData = (
       F:
         index === 0
           // F6 = Saldo Inicial - Abono
-          ? { f: `I4-E${row}` }
+          ? { f: `H4-E${row}` }
           // Fn = D(n-1) - En + F(n-1)
-          : { f: `D${row - 1}-E${row}+F${row - 1}` },
-      G: it.hora_registro ?? ''
+          : { f: `D${row - 1}-E${row}+F${row - 1}` }
     }
   })
 
@@ -70,13 +68,13 @@ const createExcelFile = (data: unknown[]): void => {
   const hoja = utils.json_to_sheet(data, { skipHeader: true })
 
   hoja['!merges'] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }
   ]
 
   hoja['!cols'] = [
     { width: 15 }, { width: 15 }, { width: 15 },
     { width: 15 }, { width: 20 }, { width: 20 },
-    { width: 20 }, { width: 15 }, { width: 20 }
+    { width: 15 }, { width: 20 }
   ]
 
   utils.book_append_sheet(libro, hoja, 'CarteraManager')

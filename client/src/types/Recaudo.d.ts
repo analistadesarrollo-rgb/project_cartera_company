@@ -28,7 +28,6 @@ export interface DataReporte {
   NOTA_CONTEO: string;
   USR_CONTEO: string;
   HORA_CONTEO: string;
-  HORASYNC: string;
   EMPRESA: string;
   Seller?: Seller;
 }

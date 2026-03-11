@@ -116,7 +116,6 @@ export default function ReportMngr () {
                 <TableHeaderCell className="text-right">Saldo Día</TableHeaderCell>
                 <TableHeaderCell className="text-right">Abono Cartera</TableHeaderCell>
                 <TableHeaderCell className="text-right">Diferencia día</TableHeaderCell>
-                <TableHeaderCell className="text-right">Hora Registro</TableHeaderCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -129,14 +128,13 @@ export default function ReportMngr () {
                     <TableCell className="text-right">{formatValue(item.ingresos - item.egresos)}</TableCell>
                     <TableCell className="text-right">{formatValue(item.abonos_cartera)}</TableCell>
                     <TableCell className="text-right">{formatValue((item.ingresos - item.egresos) - item.abonos_cartera)}</TableCell>
-                    <TableCell className="text-right">{item.hora_registro ?? ''}</TableCell>
                   </TableRow>
                 ))
               }
             </TableBody>
             <TableFoot className='sticky bottom-0 bg-gray-100 z-30'>
               <TableRow>
-                <TableHeaderCell colSpan={6} scope="row" className="text-right">Saldo final cartera:</TableHeaderCell>
+                <TableHeaderCell colSpan={5} scope="row" className="text-right">Saldo final cartera:</TableHeaderCell>
                 <TableHeaderCell colSpan={1} scope="row" className="text-right">
                   {formatValue(total)}
                 </TableHeaderCell>
@@ -152,14 +150,14 @@ export default function ReportMngr () {
                 <TableHeaderCell colSpan={1} scope="row" className="text-right">
                   {formatValue(sumaEgresos)}
                 </TableHeaderCell>
-                <TableHeaderCell colSpan={3} scope="row" className="text-right">
+                <TableHeaderCell colSpan={2} scope="row" className="text-right">
                   {formatValue(sumaAbonos)}
                 </TableHeaderCell>
               </TableRow>
             </TableFoot>
             <TableFoot className=''>
               <TableRow>
-                <TableHeaderCell colSpan={6} scope="row" className="text-right">Base asignada:</TableHeaderCell>
+                <TableHeaderCell colSpan={5} scope="row" className="text-right">Base asignada:</TableHeaderCell>
                 <TableHeaderCell colSpan={1} scope="row" className="text-right">
                   <Badge variant='success'>{formatValue(data?.base || 0)}</Badge>
                 </TableHeaderCell>
